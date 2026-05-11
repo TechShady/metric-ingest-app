@@ -5,11 +5,11 @@ import { DEFAULT_RATE_CENTS_PER_DP } from "../lib/cost";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "6px 10px",
-  background: "rgba(128,128,128,0.1)",
-  border: "1px solid rgba(128,128,128,0.3)",
+  padding: "8px 10px",
+  background: "rgba(255,255,255,0.12)",
+  border: "1px solid rgba(255,255,255,0.25)",
   borderRadius: 4,
-  color: "inherit",
+  color: "#fff",
   fontSize: 13,
   boxSizing: "border-box",
 };
@@ -17,7 +17,7 @@ const inputStyle: React.CSSProperties = {
 const overlayStyle: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.5)",
+  background: "rgba(0,0,0,0.6)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -25,21 +25,21 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const dialogStyle: React.CSSProperties = {
-  background: "var(--dt-colors-surface-default, #1a1e38)",
+  background: "#2b2f4a",
   borderRadius: 8,
   padding: 24,
   width: 420,
   maxWidth: "90vw",
-  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-  color: "inherit",
+  boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+  color: "#e0e0e0",
 };
 
 const btnStyle: React.CSSProperties = {
   padding: "6px 16px",
   borderRadius: 4,
-  border: "1px solid rgba(128,128,128,0.4)",
+  border: "1px solid rgba(255,255,255,0.25)",
   background: "transparent",
-  color: "inherit",
+  color: "#e0e0e0",
   cursor: "pointer",
   fontSize: 13,
 };
