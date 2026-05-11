@@ -22,7 +22,7 @@ export const Card: React.FC<{ title?: string; children: React.ReactNode; style?:
 export const Stat: React.FC<{ label: string; value: string; sub?: string }> = ({ label, value, sub }) => (
   <Card>
     <div style={{ fontSize: 12, opacity: 0.7 }}>{label}</div>
-    <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>{value}</div>
+    <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
     {sub && <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>{sub}</div>}
   </Card>
 );

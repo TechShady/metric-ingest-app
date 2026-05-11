@@ -23,15 +23,15 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
   useEffect(() => {
     let abort = false;
     setLoading(true);
-    setProgress(`Querying metric cardinality over ${timeframe} (chunked by prefix)...`);
+    setProgress(`Querying metric cardinality (chunked by prefix)...`);
     (async () => {
-      const r = await fetchAllMetricCardinality(timeframe);
+      const r = await fetchAllMetricCardinality("now()-2h");
       if (abort) return;
       setRows(r);
       setLoading(false);
     })();
     return () => { abort = true; };
-  }, [timeframe]);
+  }, []);
 
   const filtered = useMemo(() => {
     if (!filter) return rows;
