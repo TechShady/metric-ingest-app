@@ -13,25 +13,40 @@ import { fmtNum, linearForecast } from "../lib/forecast";
 
 interface Props { timeframe: string; }
 
+// metric.series only reliably supports up to ~7d; cap longer windows
+const MAX_CARDINALITY_TF = "now()-7d";
+const capTimeframe = (tf: string): { capped: string; wasCapped: boolean } => {
+  const m = tf.match(/^now\(\)-(\d+)([dhm])$/);
+  if (!m) return { capped: tf, wasCapped: false };
+  const n = parseInt(m[1], 10);
+  const unit = m[2];
+  const hours = unit === "d" ? n * 24 : unit === "h" ? n : n / 60;
+  if (hours > 7 * 24) return { capped: MAX_CARDINALITY_TF, wasCapped: true };
+  return { capped: tf, wasCapped: false };
+};
+
 export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<string>("");
   const [rows, setRows] = useState<MetricKeyRow[]>([]);
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [capped, setCapped] = useState(false);
 
   useEffect(() => {
     let abort = false;
     setLoading(true);
-    setProgress(`Querying metric cardinality (chunked by prefix)...`);
+    const { capped: tf, wasCapped } = capTimeframe(timeframe);
+    setCapped(wasCapped);
+    setProgress(`Querying metric cardinality over ${tf}${wasCapped ? " (capped from " + timeframe + ")" : ""} (chunked by prefix)...`);
     (async () => {
-      const r = await fetchAllMetricCardinality("now()-2h");
+      const r = await fetchAllMetricCardinality(tf);
       if (abort) return;
       setRows(r);
       setLoading(false);
     })();
     return () => { abort = true; };
-  }, []);
+  }, [timeframe]);
 
   const filtered = useMemo(() => {
     if (!filter) return rows;
@@ -52,6 +67,11 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {capped && (
+        <div style={{ padding: "8px 12px", background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 6, fontSize: 12 }}>
+          Timeframe capped to 7 days — <code>metric.series</code> does not reliably support longer windows. Use <strong>Cost Forecast</strong> or <strong>Forecast Top N</strong> for 30-day historical analysis.
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <Stat label="Distinct metric keys" value={String(rows.length)} />
         <Stat label="Total series" value={fmtNum(totalSeries)} />
