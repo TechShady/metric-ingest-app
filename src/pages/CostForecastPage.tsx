@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Loader, Stat } from "../components/Common";
+import { SortableTable } from "../components/SortableTable";
 import { LineChart } from "../components/LineChart";
 import { BarList } from "../components/BarList";
 import { runDqlChunks, N } from "../lib/dql";
@@ -224,66 +225,40 @@ export const CostForecastPage: React.FC<Props> = ({ topN }) => {
       </Card>
 
       <Card title={`Top ${metrics.length} metrics — cost breakdown & ${HORIZON_DAYS}d projection`}>
-        <div style={{ maxHeight: 520, overflowY: "auto", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 4 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead style={{ position: "sticky", top: 0, background: "rgba(128,128,128,0.15)" }}>
-              <tr>
-                <th style={th}>Metric key</th>
-                <th style={{ ...th, textAlign: "right" }}>Series</th>
-                <th style={{ ...th, textAlign: "right" }}>DP (30d)</th>
-                <th style={{ ...th, textAlign: "right" }}>Cost (30d)</th>
-                <th style={{ ...th, textAlign: "right" }}>Daily avg $</th>
-                <th style={{ ...th, textAlign: "right" }}>Monthly $</th>
-                <th style={{ ...th, textAlign: "right" }}>Annual $</th>
-                <th style={{ ...th, textAlign: "right" }}>Projected (next 30d)</th>
-                <th style={{ ...th, textAlign: "right" }}>Δ%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {metrics.map((m) => {
-                const cur = costUSD(m.totalDp, rateCentsPerDp);
-                const proj = costUSD(m.projectedDp, rateCentsPerDp);
-                const dpDays = m.history.length || 1;
-                const dailyAvg = cur / dpDays;
-                const delta = m.totalDp > 0 ? ((m.projectedDp - m.totalDp) / m.totalDp) * 100 : 0;
-                return (
-                  <tr key={m.metric_key} style={{ borderBottom: "1px solid rgba(128,128,128,0.15)" }}>
-                    <td style={td}><code>{m.metric_key}</code></td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmtNum(m.series)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmtNum(m.totalDp)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmtUSD(cur)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmtUSD(dailyAvg)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmtUSD(dailyAvg * 30)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmtUSD(dailyAvg * 365)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmtUSD(proj)}</td>
-                    <td style={{
-                      ...td, textAlign: "right",
-                      color: delta > 5 ? "#ff6b35" : delta < -5 ? "#10b981" : undefined,
-                      fontWeight: 600,
-                    }}>
-                      {delta >= 0 ? "+" : ""}{delta.toFixed(1)}%
-                    </td>
-                  </tr>
-                );
-              })}
-              <tr style={{ background: "rgba(128,128,128,0.1)", fontWeight: 700 }}>
-                <td style={td}>Top {metrics.length} subtotal</td>
-                <td style={{ ...td, textAlign: "right" }}>—</td>
-                <td style={{ ...td, textAlign: "right" }}>
-                  {fmtNum(metrics.reduce((a, m) => a + m.totalDp, 0))}
-                </td>
-                <td style={{ ...td, textAlign: "right" }}>{fmtUSD(topMetricsCurrentCost)}</td>
-                <td style={{ ...td, textAlign: "right" }}>—</td>
-                <td style={{ ...td, textAlign: "right" }}>—</td>
-                <td style={{ ...td, textAlign: "right" }}>—</td>
-                <td style={{ ...td, textAlign: "right" }}>
-                  {fmtUSD(metrics.reduce((a, m) => a + costUSD(m.projectedDp, rateCentsPerDp), 0))}
-                </td>
-                <td style={{ ...td, textAlign: "right" }}>—</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <SortableTable
+          columns={[
+            { key: "metric_key", header: "Metric key", render: (m: MetricCost) => <code>{m.metric_key}</code>, sortValue: (m: MetricCost) => m.metric_key },
+            { key: "series", header: "Series", align: "right", render: (m: MetricCost) => fmtNum(m.series), sortValue: (m: MetricCost) => m.series },
+            { key: "dp", header: "DP (30d)", align: "right", render: (m: MetricCost) => fmtNum(m.totalDp), sortValue: (m: MetricCost) => m.totalDp },
+            { key: "cost30", header: "Cost (30d)", align: "right", render: (m: MetricCost) => fmtUSD(costUSD(m.totalDp, rateCentsPerDp)), sortValue: (m: MetricCost) => m.totalDp },
+            { key: "dailyAvg", header: "Daily avg $", align: "right", render: (m: MetricCost) => fmtUSD(costUSD(m.totalDp, rateCentsPerDp) / (m.history.length || 1)), sortValue: (m: MetricCost) => m.totalDp / (m.history.length || 1) },
+            { key: "monthly", header: "Monthly $", align: "right", render: (m: MetricCost) => fmtUSD(costUSD(m.totalDp, rateCentsPerDp) / (m.history.length || 1) * 30), sortValue: (m: MetricCost) => m.totalDp / (m.history.length || 1) },
+            { key: "annual", header: "Annual $", align: "right", render: (m: MetricCost) => fmtUSD(costUSD(m.totalDp, rateCentsPerDp) / (m.history.length || 1) * 365), sortValue: (m: MetricCost) => m.totalDp / (m.history.length || 1) },
+            { key: "projected", header: "Projected (next 30d)", align: "right", render: (m: MetricCost) => fmtUSD(costUSD(m.projectedDp, rateCentsPerDp)), sortValue: (m: MetricCost) => m.projectedDp },
+            { key: "delta", header: "Δ%", align: "right", render: (m: MetricCost) => {
+              const delta = m.totalDp > 0 ? ((m.projectedDp - m.totalDp) / m.totalDp) * 100 : 0;
+              return <span style={{ fontWeight: 600, color: delta > 5 ? "#ff6b35" : delta < -5 ? "#10b981" : undefined }}>{delta >= 0 ? "+" : ""}{delta.toFixed(1)}%</span>;
+            }, sortValue: (m: MetricCost) => m.totalDp > 0 ? ((m.projectedDp - m.totalDp) / m.totalDp) * 100 : 0 },
+          ]}
+          data={metrics}
+          rowKey={(m) => m.metric_key}
+          maxHeight={520}
+          defaultSortKey="projected"
+          defaultSortDir="desc"
+          footerRow={
+            <tr style={{ background: "rgba(128,128,128,0.1)", fontWeight: 700 }}>
+              <td style={{ padding: "6px 10px" }}>Top {metrics.length} subtotal</td>
+              <td style={{ padding: "6px 10px", textAlign: "right" }}>—</td>
+              <td style={{ padding: "6px 10px", textAlign: "right" }}>{fmtNum(metrics.reduce((a, m) => a + m.totalDp, 0))}</td>
+              <td style={{ padding: "6px 10px", textAlign: "right" }}>{fmtUSD(topMetricsCurrentCost)}</td>
+              <td style={{ padding: "6px 10px", textAlign: "right" }}>—</td>
+              <td style={{ padding: "6px 10px", textAlign: "right" }}>—</td>
+              <td style={{ padding: "6px 10px", textAlign: "right" }}>—</td>
+              <td style={{ padding: "6px 10px", textAlign: "right" }}>{fmtUSD(metrics.reduce((a, m) => a + costUSD(m.projectedDp, rateCentsPerDp), 0))}</td>
+              <td style={{ padding: "6px 10px", textAlign: "right" }}>—</td>
+            </tr>
+          }
+        />
       </Card>
 
       <Card>
@@ -295,6 +270,3 @@ export const CostForecastPage: React.FC<Props> = ({ topN }) => {
     </div>
   );
 };
-
-const th: React.CSSProperties = { padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap" };
-const td: React.CSSProperties = { padding: "6px 10px", whiteSpace: "nowrap" };

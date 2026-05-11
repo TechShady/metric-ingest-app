@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Loader, Stat } from "../components/Common";
+import { SortableTable } from "../components/SortableTable";
 import { fetchAllMetricCardinality, MetricKeyRow } from "../lib/queries";
 import { fmtNum } from "../lib/forecast";
 import { costUSD, fmtUSD } from "../lib/cost";
@@ -84,8 +85,7 @@ export const DiffPage: React.FC = () => {
     else if (filter === "grew") r = r.filter((x) => !x.isNew && !x.isGone && x.delta > 0);
     else if (filter === "shrank") r = r.filter((x) => !x.isNew && !x.isGone && x.delta < 0);
     if (textFilter) r = r.filter((x) => x.metric_key.toLowerCase().includes(textFilter.toLowerCase()));
-    // Sort by abs cost delta desc
-    return [...r].sort((a, b) => Math.abs(b.costDelta) - Math.abs(a.costDelta));
+    return r;
   }, [rows, filter, textFilter]);
 
   if (loading) return <Loader msg={progress || "Comparing snapshots..."} />;
@@ -154,59 +154,25 @@ export const DiffPage: React.FC = () => {
       </Card>
 
       <Card>
-        <div style={{ maxHeight: 600, overflowY: "auto", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 4 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead style={{ position: "sticky", top: 0, background: "rgba(128,128,128,0.15)" }}>
-              <tr>
-                <th style={th}>Metric key</th>
-                <th style={{ ...th, textAlign: "right" }}>Then ({period} ago)</th>
-                <th style={{ ...th, textAlign: "right" }}>Now</th>
-                <th style={{ ...th, textAlign: "right" }}>Δ series</th>
-                <th style={{ ...th, textAlign: "right" }}>% change</th>
-                <th style={{ ...th, textAlign: "right" }}>Δ annual cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.slice(0, 500).map((r) => {
-                const tag = r.isNew ? "NEW" : r.isGone ? "GONE" : null;
-                const tagColor = r.isNew ? "#10b981" : r.isGone ? "#6b7280" : "";
-                return (
-                  <tr key={r.metric_key} style={{ borderBottom: "1px solid rgba(128,128,128,0.15)" }}>
-                    <td style={td}>
-                      <code>{r.metric_key}</code>
-                      {tag && (
-                        <span style={{
-                          marginLeft: 8, fontSize: 10, padding: "1px 6px",
-                          background: tagColor, color: "#fff", borderRadius: 3, fontWeight: 600,
-                        }}>{tag}</span>
-                      )}
-                    </td>
-                    <td style={{ ...td, textAlign: "right" }}>{r.previous === 0 ? "—" : fmtNum(r.previous)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>{r.current === 0 ? "—" : fmtNum(r.current)}</td>
-                    <td style={{ ...td, textAlign: "right",
-                                 color: r.delta > 0 ? "#ff6b35" : r.delta < 0 ? "#10b981" : undefined,
-                                 fontWeight: 600 }}>
-                      {r.delta >= 0 ? "+" : ""}{fmtNum(r.delta)}
-                    </td>
-                    <td style={{ ...td, textAlign: "right" }}>
-                      {!isFinite(r.pctChange) ? "∞" : `${r.pctChange >= 0 ? "+" : ""}${r.pctChange.toFixed(1)}%`}
-                    </td>
-                    <td style={{ ...td, textAlign: "right",
-                                 color: r.costDelta > 0 ? "#ff6b35" : r.costDelta < 0 ? "#10b981" : undefined,
-                                 fontWeight: 600 }}>
-                      {r.costDelta >= 0 ? "+" : ""}{fmtUSD(r.costDelta)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filtered.length > 500 && (
-            <div style={{ padding: 8, fontSize: 12, opacity: 0.7, textAlign: "center" }}>
-              Showing first 500 of {filtered.length}.
-            </div>
-          )}
-        </div>
+        <SortableTable
+          columns={[
+            { key: "metric_key", header: "Metric key", render: (r: DiffRow) => {
+              const tag = r.isNew ? "NEW" : r.isGone ? "GONE" : null;
+              const tagColor = r.isNew ? "#10b981" : r.isGone ? "#6b7280" : "";
+              return <><code>{r.metric_key}</code>{tag && <span style={{ marginLeft: 8, fontSize: 10, padding: "1px 6px", background: tagColor, color: "#fff", borderRadius: 3, fontWeight: 600 }}>{tag}</span>}</>;
+            }, sortValue: (r: DiffRow) => r.metric_key },
+            { key: "previous", header: `Then (${period} ago)`, align: "right", render: (r: DiffRow) => r.previous === 0 ? "\u2014" : fmtNum(r.previous), sortValue: (r: DiffRow) => r.previous },
+            { key: "current", header: "Now", align: "right", render: (r: DiffRow) => r.current === 0 ? "\u2014" : fmtNum(r.current), sortValue: (r: DiffRow) => r.current },
+            { key: "delta", header: "\u0394 series", align: "right", render: (r: DiffRow) => <span style={{ color: r.delta > 0 ? "#ff6b35" : r.delta < 0 ? "#10b981" : undefined, fontWeight: 600 }}>{r.delta >= 0 ? "+" : ""}{fmtNum(r.delta)}</span>, sortValue: (r: DiffRow) => r.delta },
+            { key: "pct", header: "% change", align: "right", render: (r: DiffRow) => !isFinite(r.pctChange) ? "\u221E" : `${r.pctChange >= 0 ? "+" : ""}${r.pctChange.toFixed(1)}%`, sortValue: (r: DiffRow) => isFinite(r.pctChange) ? r.pctChange : 999999 },
+            { key: "cost", header: "\u0394 annual cost", align: "right", render: (r: DiffRow) => <span style={{ color: r.costDelta > 0 ? "#ff6b35" : r.costDelta < 0 ? "#10b981" : undefined, fontWeight: 600 }}>{r.costDelta >= 0 ? "+" : ""}{fmtUSD(r.costDelta)}</span>, sortValue: (r: DiffRow) => Math.abs(r.costDelta) },
+          ]}
+          data={filtered}
+          rowKey={(r) => r.metric_key}
+          maxRows={500}
+          defaultSortKey="cost"
+          defaultSortDir="desc"
+        />
       </Card>
 
       <Card>
@@ -218,8 +184,6 @@ export const DiffPage: React.FC = () => {
   );
 };
 
-const th: React.CSSProperties = { padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap" };
-const td: React.CSSProperties = { padding: "6px 10px", verticalAlign: "top" };
 const inputStyle: React.CSSProperties = {
   padding: "6px 10px",
   background: "rgba(128,128,128,0.1)",

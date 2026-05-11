@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Loader, Stat } from "../components/Common";
+import { SortableTable, Column } from "../components/SortableTable";
 import { LineChart } from "../components/LineChart";
 import { BarList } from "../components/BarList";
 import {
@@ -17,7 +18,6 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
   const [progress, setProgress] = useState<string>("");
   const [rows, setRows] = useState<MetricKeyRow[]>([]);
   const [filter, setFilter] = useState("");
-  const [sortBy, setSortBy] = useState<"series" | "name">("series");
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,14 +34,19 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
   }, [timeframe]);
 
   const filtered = useMemo(() => {
-    let r = rows;
-    if (filter) r = r.filter((x) => x.metric_key.toLowerCase().includes(filter.toLowerCase()));
-    if (sortBy === "name") r = [...r].sort((a, b) => a.metric_key.localeCompare(b.metric_key));
-    return r;
-  }, [rows, filter, sortBy]);
+    if (!filter) return rows;
+    return rows.filter((x) => x.metric_key.toLowerCase().includes(filter.toLowerCase()));
+  }, [rows, filter]);
 
   const totalSeries = rows.reduce((a, b) => a + b.series, 0);
   const totalEst = rows.reduce((a, b) => a + b.estDailyDatapoints, 0);
+
+  const columns = useMemo((): Column<MetricKeyRow>[] => [
+    { key: "name", header: "Metric key", render: (r) => <code>{r.metric_key}</code>, sortValue: (r) => r.metric_key },
+    { key: "series", header: "Series", align: "right", render: (r) => fmtNum(r.series), sortValue: (r) => r.series },
+    { key: "dp", header: "Est. DP/day", align: "right", render: (r) => fmtNum(r.estDailyDatapoints), sortValue: (r) => r.estDailyDatapoints },
+    { key: "pct", header: "% of total", align: "right", render: (r) => `${totalSeries > 0 ? ((r.series / totalSeries) * 100).toFixed(2) : "0"}%`, sortValue: (r) => r.series },
+  ], [totalSeries]);
 
   if (loading) return <Loader msg={progress} />;
 
@@ -71,61 +76,28 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
               borderRadius: 4, color: "inherit",
             }}
           />
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
-                  style={{ padding: "6px 10px", background: "rgba(128,128,128,0.1)",
-                           border: "1px solid rgba(128,128,128,0.3)", borderRadius: 4, color: "inherit" }}>
-            <option value="series">Sort: cardinality</option>
-            <option value="name">Sort: name</option>
-          </select>
           <span style={{ fontSize: 12, opacity: 0.7 }}>{filtered.length} matches</span>
         </div>
 
-        <div style={{ maxHeight: 480, overflowY: "auto", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 4 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead style={{ position: "sticky", top: 0, background: "rgba(128,128,128,0.15)" }}>
-              <tr>
-                <th style={th}>Metric key</th>
-                <th style={{ ...th, textAlign: "right" }}>Series</th>
-                <th style={{ ...th, textAlign: "right" }}>Est. DP/day</th>
-                <th style={{ ...th, textAlign: "right" }}>% of total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.slice(0, 500).map((r) => (
-                <tr key={r.metric_key}
-                    onClick={() => setSelected(r.metric_key)}
-                    style={{
-                      cursor: "pointer",
-                      background: selected === r.metric_key ? "rgba(20,150,255,0.12)" : undefined,
-                      borderBottom: "1px solid rgba(128,128,128,0.15)",
-                    }}>
-                  <td style={td}>
-                    <code>{r.metric_key}</code>
-                  </td>
-                  <td style={{ ...td, textAlign: "right" }}>{fmtNum(r.series)}</td>
-                  <td style={{ ...td, textAlign: "right" }}>{fmtNum(r.estDailyDatapoints)}</td>
-                  <td style={{ ...td, textAlign: "right" }}>
-                    {totalSeries > 0 ? ((r.series / totalSeries) * 100).toFixed(2) : "0"}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filtered.length > 500 && (
-            <div style={{ padding: 8, fontSize: 12, opacity: 0.7, textAlign: "center" }}>
-              Showing first 500 of {filtered.length}. Use filter to narrow.
-            </div>
-          )}
-        </div>
+        <SortableTable
+          columns={columns}
+          data={filtered}
+          rowKey={(r) => r.metric_key}
+          maxHeight={480}
+          maxRows={500}
+          onRowClick={(r) => setSelected(r.metric_key)}
+          rowStyle={(r) => ({
+            background: selected === r.metric_key ? "rgba(20,150,255,0.12)" : undefined,
+          })}
+          defaultSortKey="series"
+          defaultSortDir="desc"
+        />
       </Card>
 
       {selected && <MetricDetail metricKey={selected} timeframe={timeframe} onClose={() => setSelected(null)} />}
     </div>
   );
 };
-
-const th: React.CSSProperties = { padding: "8px 12px", textAlign: "left", fontWeight: 600, fontSize: 12 };
-const td: React.CSSProperties = { padding: "6px 12px" };
 
 const MetricDetail: React.FC<{ metricKey: string; timeframe: string; onClose: () => void }> = ({
   metricKey, timeframe, onClose,

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Loader, Stat } from "../components/Common";
+import { SortableTable } from "../components/SortableTable";
 import { BarList } from "../components/BarList";
 import { fetchAllMetricCardinality, fetchAllSeriesFor, MetricKeyRow } from "../lib/queries";
 import { fmtNum } from "../lib/forecast";
@@ -237,57 +238,37 @@ const DimensionExplorer: React.FC<{ metricKey: string }> = ({ metricKey }) => {
         Cardinality of each dimension. <strong>If you removed a high-cardinality dimension</strong>, series count would collapse to roughly the number of distinct combinations of remaining dimensions. Look for dims with high distinct count and high fill rate — they drive cost.
       </div>
 
-      <div style={{ maxHeight: 500, overflowY: "auto", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 4 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-          <thead style={{ position: "sticky", top: 0, background: "rgba(128,128,128,0.15)" }}>
-            <tr>
-              <th style={th}>Dimension</th>
-              <th style={{ ...th, textAlign: "right" }}>Distinct values</th>
-              <th style={{ ...th, textAlign: "right" }}>Fill rate</th>
-              <th style={{ ...th, textAlign: "right" }}>If removed</th>
-              <th style={th}>Top values</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.map((d) => {
-              // Crude estimate: removing this dim could collapse series by up to (distinct-1)/distinct
-              // (true impact depends on whether other dims are correlated)
-              const collapseFactor = d.distinct > 0 ? 1 / d.distinct : 1;
-              const newSeriesEstimate = Math.ceil(totalSeries * collapseFactor);
-              const savings = annualCost - dailyCostPerSeries * newSeriesEstimate * 365;
-              const isHotspot = d.distinct > 50 && d.fillRate > 0.5;
-              return (
-                <tr key={d.field} style={{
-                  borderBottom: "1px solid rgba(128,128,128,0.15)",
-                  background: isHotspot ? "rgba(255,107,53,0.07)" : undefined,
-                }}>
-                  <td style={td}>
-                    <code>{d.field}</code>
-                    {isHotspot && <span style={{
-                      marginLeft: 6, fontSize: 10, padding: "1px 6px",
-                      background: "#ff6b35", color: "#fff", borderRadius: 3,
-                    }}>hotspot</span>}
-                  </td>
-                  <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{fmtNum(d.distinct)}</td>
-                  <td style={{ ...td, textAlign: "right" }}>{(d.fillRate * 100).toFixed(0)}%</td>
-                  <td style={{ ...td, textAlign: "right" }} title="Upper-bound estimate">
-                    ~{fmtNum(newSeriesEstimate)} series
-                    <div style={{ fontSize: 10, opacity: 0.7 }}>≤ {fmtUSD(savings)}/yr saved</div>
-                  </td>
-                  <td style={{ ...td, fontSize: 11, opacity: 0.85 }}>
-                    {d.topValues.map((t) => (
-                      <div key={t.value} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 320 }}>
-                        <code>{t.value.length > 50 ? t.value.slice(0, 50) + "…" : t.value}</code>
-                        <span style={{ opacity: 0.6, marginLeft: 4 }}>({t.count})</span>
-                      </div>
-                    ))}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <SortableTable
+        columns={[
+          { key: "field", header: "Dimension", render: (d: DimStat) => {
+            const isHotspot = d.distinct > 50 && d.fillRate > 0.5;
+            return <><code>{d.field}</code>{isHotspot && <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 6px", background: "#ff6b35", color: "#fff", borderRadius: 3 }}>hotspot</span>}</>;
+          }, sortValue: (d: DimStat) => d.field },
+          { key: "distinct", header: "Distinct values", align: "right", render: (d: DimStat) => <span style={{ fontWeight: 600 }}>{fmtNum(d.distinct)}</span>, sortValue: (d: DimStat) => d.distinct },
+          { key: "fillRate", header: "Fill rate", align: "right", render: (d: DimStat) => `${(d.fillRate * 100).toFixed(0)}%`, sortValue: (d: DimStat) => d.fillRate },
+          { key: "ifRemoved", header: "If removed", align: "right", render: (d: DimStat) => {
+            const collapseFactor = d.distinct > 0 ? 1 / d.distinct : 1;
+            const newSeriesEstimate = Math.ceil(totalSeries * collapseFactor);
+            const savings = annualCost - dailyCostPerSeries * newSeriesEstimate * 365;
+            return <span title="Upper-bound estimate">~{fmtNum(newSeriesEstimate)} series<div style={{ fontSize: 10, opacity: 0.7 }}>\u2264 {fmtUSD(savings)}/yr saved</div></span>;
+          }, sortValue: (d: DimStat) => d.distinct },
+          { key: "topValues", header: "Top values", render: (d: DimStat) => <div style={{ fontSize: 11, opacity: 0.85 }}>{d.topValues.map((t) => (
+            <div key={t.value} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 320 }}>
+              <code>{t.value.length > 50 ? t.value.slice(0, 50) + "\u2026" : t.value}</code>
+              <span style={{ opacity: 0.6, marginLeft: 4 }}>({t.count})</span>
+            </div>
+          ))}</div> },
+        ]}
+        data={stats}
+        rowKey={(d) => d.field}
+        maxHeight={500}
+        fontSize={12}
+        defaultSortKey="distinct"
+        defaultSortDir="desc"
+        rowStyle={(d) => ({
+          background: d.distinct > 50 && d.fillRate > 0.5 ? "rgba(255,107,53,0.07)" : undefined,
+        })}
+      />
 
       <div style={{ marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Top dimension hotspots</div>
@@ -303,8 +284,6 @@ const DimensionExplorer: React.FC<{ metricKey: string }> = ({ metricKey }) => {
   );
 };
 
-const th: React.CSSProperties = { padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" };
-const td: React.CSSProperties = { padding: "6px 10px", verticalAlign: "top" };
 const inputStyle: React.CSSProperties = {
   padding: "6px 10px",
   background: "rgba(128,128,128,0.1)",

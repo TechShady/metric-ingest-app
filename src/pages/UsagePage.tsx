@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Loader, Stat } from "../components/Common";
+import { SortableTable, Column } from "../components/SortableTable";
 import { fetchAllMetricCardinality, fetchMetricQueryStrings, MetricKeyRow } from "../lib/queries";
 import { fmtNum } from "../lib/forecast";
 import { costUSD, fmtUSD } from "../lib/cost";
@@ -117,43 +118,23 @@ export const UsagePage: React.FC = () => {
       </Card>
 
       <Card title={`${statusFilter === "idle" ? "Idle" : statusFilter === "rare" ? "Rarely-queried" : statusFilter === "active" ? "Active" : "All"} metrics`}>
-        <div style={{ maxHeight: 600, overflowY: "auto", border: "1px solid rgba(128,128,128,0.2)", borderRadius: 4 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead style={{ position: "sticky", top: 0, background: "rgba(128,128,128,0.15)" }}>
-              <tr>
-                <th style={th}>Status</th>
-                <th style={th}>Metric key</th>
-                <th style={{ ...th, textAlign: "right" }}>Series</th>
-                <th style={{ ...th, textAlign: "right" }}>Queries / {LOOKBACK_DAYS}d</th>
-                <th style={{ ...th, textAlign: "right" }}>Annual cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.slice(0, 500).map((r) => {
-                const annual = dailyCostPerSeries * r.series * 365;
-                return (
-                  <tr key={r.metric_key} style={{ borderBottom: "1px solid rgba(128,128,128,0.15)" }}>
-                    <td style={td}><Badge status={r.status} /></td>
-                    <td style={td}><code>{r.metric_key}</code></td>
-                    <td style={{ ...td, textAlign: "right" }}>{fmtNum(r.series)}</td>
-                    <td style={{ ...td, textAlign: "right" }}>
-                      {r.queryCount === 0 ? <span style={{ opacity: 0.5 }}>—</span> : fmtNum(r.queryCount)}
-                    </td>
-                    <td style={{ ...td, textAlign: "right", fontWeight: 600,
-                                color: r.status === "idle" ? "#ff6b35" : undefined }}>
-                      {fmtUSD(annual)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filtered.length > 500 && (
-            <div style={{ padding: 8, fontSize: 12, opacity: 0.7, textAlign: "center" }}>
-              Showing first 500 of {filtered.length}.
-            </div>
-          )}
-        </div>
+        <SortableTable
+          columns={[
+            { key: "status", header: "Status", render: (r: UsageRow) => <Badge status={r.status} />, sortValue: (r: UsageRow) => r.status },
+            { key: "metric_key", header: "Metric key", render: (r: UsageRow) => <code>{r.metric_key}</code>, sortValue: (r: UsageRow) => r.metric_key },
+            { key: "series", header: "Series", align: "right", render: (r: UsageRow) => fmtNum(r.series), sortValue: (r: UsageRow) => r.series },
+            { key: "queries", header: `Queries / ${LOOKBACK_DAYS}d`, align: "right", render: (r: UsageRow) => r.queryCount === 0 ? <span style={{ opacity: 0.5 }}>—</span> : fmtNum(r.queryCount), sortValue: (r: UsageRow) => r.queryCount },
+            { key: "annual", header: "Annual cost", align: "right", render: (r: UsageRow) => {
+              const annual = dailyCostPerSeries * r.series * 365;
+              return <span style={{ fontWeight: 600, color: r.status === "idle" ? "#ff6b35" : undefined }}>{fmtUSD(annual)}</span>;
+            }, sortValue: (r: UsageRow) => r.series },
+          ]}
+          data={filtered}
+          rowKey={(r) => r.metric_key}
+          maxRows={500}
+          defaultSortKey="series"
+          defaultSortDir="desc"
+        />
       </Card>
 
       <Card>
@@ -198,8 +179,6 @@ function downloadCsv(rows: UsageRow[], rate: number) {
   URL.revokeObjectURL(url);
 }
 
-const th: React.CSSProperties = { padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap" };
-const td: React.CSSProperties = { padding: "6px 10px" };
 const inputStyle: React.CSSProperties = {
   padding: "6px 10px",
   background: "rgba(128,128,128,0.1)",
