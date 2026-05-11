@@ -1,0 +1,5 @@
+name: my.metric.ingest
+version: 0.5.7
+title: Metric Ingest Insights
+description: Analyze metric ingest volume by metric key, source, and forecast.
+icon: ./src/assets/icon.svg

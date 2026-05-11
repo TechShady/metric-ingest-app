@@ -1,0 +1,15 @@
+{
+  "environmentUrl": "https://ezd05500.apps.dynatrace.com",
+  "app": {
+    "name": "Metric Ingest Insights",
+    "version": "0.5.7",
+    "id": "my.metric.ingest",
+    "description": "Analyze metric ingest volume by metric key, source, and forecast trends.",
+    "scopes": [
+      { "name": "storage:metrics:read", "comment": "fetch metric.series and timeseries" },
+      { "name": "storage:entities:read", "comment": "entity name lookups" },
+      { "name": "storage:buckets:read", "comment": "named buckets" },
+      { "name": "storage:system:read", "comment": "dt.system.events for query exec stats" }
+    ]
+  }
+}
