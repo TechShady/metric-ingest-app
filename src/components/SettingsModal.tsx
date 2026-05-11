@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Modal } from "@dynatrace/strato-components/overlays";
 import { Button } from "@dynatrace/strato-components/buttons";
 import { Flex } from "@dynatrace/strato-components/layouts";
-import { FormField, Label, Hint, NumberInput, TextInput } from "@dynatrace/strato-components-preview/forms";
+import { FormField, Label, Hint, NumberInput } from "@dynatrace/strato-components-preview/forms";
 import { useSettings } from "../state/SettingsContext";
 import { DEFAULT_RATE_CENTS_PER_DP } from "../lib/cost";
 
@@ -59,10 +59,21 @@ export const SettingsModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
         <FormField>
           <Label>Cost per datapoint (cents)</Label>
-          <TextInput
+          <input
+            type="text"
             value={localRateStr}
-            onChange={(v) => setLocalRateStr(v ?? "")}
+            onChange={(e) => setLocalRateStr(e.target.value)}
             placeholder="e.g. 0.00000045"
+            style={{
+              width: "100%",
+              padding: "6px 10px",
+              background: "rgba(128,128,128,0.1)",
+              border: `1px solid ${rateValid || localRateStr === "" ? "rgba(128,128,128,0.3)" : "#ff6b35"}`,
+              borderRadius: 4,
+              color: "inherit",
+              fontSize: 13,
+              boxSizing: "border-box",
+            }}
           />
           {!rateValid && localRateStr !== "" && (
             <Hint>Enter a valid non-negative number.</Hint>
