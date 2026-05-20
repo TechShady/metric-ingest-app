@@ -3,10 +3,13 @@ import { Card, Loader, Stat } from "../components/Common";
 import { LineChart } from "../components/LineChart";
 import { fetchTotalIngestSeries } from "../lib/queries";
 import { fmtNum, linearForecast } from "../lib/forecast";
+import { costUSD, fmtUSD } from "../lib/cost";
+import { useSettings } from "../state/SettingsContext";
 
 interface Props { timeframe: string; /* unused, forecasting always uses 30d */ }
 
 export const ForecastPage: React.FC<Props> = () => {
+  const { rateCentsPerDp } = useSettings();
   const [loading, setLoading] = useState(true);
   const [series, setSeries] = useState<{ start: number; interval: number; values: number[] } | null>(null);
   const [horizonDays, setHorizonDays] = useState(30);
@@ -62,14 +65,13 @@ export const ForecastPage: React.FC<Props> = () => {
       </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-        <Stat label={`Datapoints (last ${historyDays}d)`} value={fmtNum(totalHistory)} />
-        <Stat label="Avg / day" value={fmtNum(dailyAvg)} />
-        <Stat label={`Projected (next ${horizonDays}d)`} value={fmtNum(totalForecast)} />
+        <Stat label={`Datapoints (last ${historyDays}d)`} value={fmtNum(totalHistory)} sub={`Cost: ${fmtUSD(costUSD(totalHistory, rateCentsPerDp))}`} />
+        <Stat label="Avg / day" value={fmtNum(dailyAvg)} sub={`${fmtUSD(costUSD(dailyAvg, rateCentsPerDp))}/day`} />
+        <Stat label={`Projected (next ${horizonDays}d)`} value={fmtNum(totalForecast)} sub={`Cost: ${fmtUSD(costUSD(totalForecast, rateCentsPerDp))}`} />
         <Stat label="Daily growth (linear)"
               value={`${fc.slope >= 0 ? "+" : ""}${fmtNum(fc.slope)}/d`}
               sub={`Δ vs current avg: ${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}%`} />
-        <Stat label="Model fit (R²)" value={fc.r2.toFixed(3)}
-              sub={fc.r2 > 0.7 ? "strong" : fc.r2 > 0.4 ? "moderate" : "weak"} />
+        <Stat label="Est. monthly cost" value={fmtUSD(costUSD(dailyAvg, rateCentsPerDp) * 30)} sub={`${fmtUSD(costUSD(dailyAvg, rateCentsPerDp) * 365)}/yr`} />
       </div>
 
       <Card title={`Total metric ingest — ${historyDays}d history + ${horizonDays}d forecast`}>

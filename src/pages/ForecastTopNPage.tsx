@@ -4,6 +4,8 @@ import { LineChart } from "../components/LineChart";
 import { runDqlChunks, N } from "../lib/dql";
 import { fetchAllMetricCardinality } from "../lib/queries";
 import { fmtNum, linearForecast } from "../lib/forecast";
+import { costUSD, fmtUSD } from "../lib/cost";
+import { useSettings } from "../state/SettingsContext";
 
 interface Props { topN: number; }
 
@@ -24,6 +26,7 @@ const HISTORY_DAYS = 30;
 const HORIZON_DAYS = 30;
 
 export const ForecastTopNPage: React.FC<Props> = ({ topN }) => {
+  const { rateCentsPerDp } = useSettings();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState("Identifying top metric keys by cardinality...");
   const [rows, setRows] = useState<MetricForecast[]>([]);
@@ -100,16 +103,19 @@ export const ForecastTopNPage: React.FC<Props> = ({ topN }) => {
   const totalCurrent = rows.reduce((a, b) => a + b.total, 0);
   const totalProjected = rows.reduce((a, b) => a + b.projected, 0);
   const growthPct = totalCurrent > 0 ? ((totalProjected - totalCurrent) / totalCurrent) * 100 : 0;
+  const currentCost = costUSD(totalCurrent, rateCentsPerDp);
+  const projectedCost = costUSD(totalProjected, rateCentsPerDp);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <Stat label={`Top metrics analyzed`} value={String(rows.length)} sub={`Top ${topN} by series cardinality`} />
-        <Stat label={`Datapoints (last ${HISTORY_DAYS}d)`} value={fmtNum(totalCurrent)} />
-        <Stat label={`Projected (next ${HORIZON_DAYS}d)`} value={fmtNum(totalProjected)} />
+        <Stat label={`Datapoints (last ${HISTORY_DAYS}d)`} value={fmtNum(totalCurrent)} sub={`Cost: ${fmtUSD(currentCost)}`} />
+        <Stat label={`Projected (next ${HORIZON_DAYS}d)`} value={fmtNum(totalProjected)} sub={`Cost: ${fmtUSD(projectedCost)}`} />
         <Stat label="Aggregate trend"
               value={`${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}%`}
               sub={`vs current ${HISTORY_DAYS}d total`} />
+        <Stat label="Est. monthly cost" value={fmtUSD(currentCost)} sub={`Projected: ${fmtUSD(projectedCost)}/mo`} />
       </div>
 
       <Card>
@@ -136,7 +142,7 @@ export const ForecastTopNPage: React.FC<Props> = ({ topN }) => {
                 </code>
                 <span style={{ fontSize: 11, opacity: 0.6, whiteSpace: "nowrap" }}>{fmtNum(m.series)} series</span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, marginBottom: 6, fontSize: 11 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 4, marginBottom: 6, fontSize: 11 }}>
                 <div>
                   <div style={{ opacity: 0.65 }}>Last {HISTORY_DAYS}d</div>
                   <div style={{ fontWeight: 600 }}>{fmtNum(m.total)}</div>
@@ -144,6 +150,10 @@ export const ForecastTopNPage: React.FC<Props> = ({ topN }) => {
                 <div>
                   <div style={{ opacity: 0.65 }}>Next {HORIZON_DAYS}d</div>
                   <div style={{ fontWeight: 600 }}>{fmtNum(m.projected)}</div>
+                </div>
+                <div>
+                  <div style={{ opacity: 0.65 }}>$/month</div>
+                  <div style={{ fontWeight: 600 }}>{fmtUSD(costUSD(m.total / (HISTORY_DAYS || 1), rateCentsPerDp) * 30)}</div>
                 </div>
                 <div>
                   <div style={{ opacity: 0.65 }}>Trend</div>

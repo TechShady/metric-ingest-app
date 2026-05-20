@@ -10,6 +10,8 @@ import {
   fetchMetricBySource,
 } from "../lib/queries";
 import { fmtNum, linearForecast } from "../lib/forecast";
+import { costUSD, fmtUSD } from "../lib/cost";
+import { useSettings } from "../state/SettingsContext";
 
 interface Props { timeframe: string; }
 
@@ -25,7 +27,10 @@ const capTimeframe = (tf: string): { capped: string; wasCapped: boolean } => {
   return { capped: tf, wasCapped: false };
 };
 
+const ASSUMED_DP_PER_SERIES_PER_DAY = 1440;
+
 export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
+  const { rateCentsPerDp } = useSettings();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<string>("");
   const [rows, setRows] = useState<MetricKeyRow[]>([]);
@@ -55,13 +60,21 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
 
   const totalSeries = rows.reduce((a, b) => a + b.series, 0);
   const totalEst = rows.reduce((a, b) => a + b.estDailyDatapoints, 0);
+  const totalDailyCost = costUSD(totalEst, rateCentsPerDp);
+
+  const filteredSeries = filtered.reduce((a, b) => a + b.series, 0);
+  const filteredEst = filtered.reduce((a, b) => a + b.estDailyDatapoints, 0);
+  const filteredDailyCost = costUSD(filteredEst, rateCentsPerDp);
+  const filteredMonthlyCost = filteredDailyCost * 30;
+  const filteredAnnualCost = filteredDailyCost * 365;
 
   const columns = useMemo((): Column<MetricKeyRow>[] => [
     { key: "name", header: "Metric key", render: (r) => <code>{r.metric_key}</code>, sortValue: (r) => r.metric_key },
     { key: "series", header: "Series", align: "right", render: (r) => fmtNum(r.series), sortValue: (r) => r.series },
     { key: "dp", header: "Est. DP/day", align: "right", render: (r) => fmtNum(r.estDailyDatapoints), sortValue: (r) => r.estDailyDatapoints },
+    { key: "cost", header: "Est. $/month", align: "right", render: (r) => fmtUSD(costUSD(r.estDailyDatapoints, rateCentsPerDp) * 30), sortValue: (r) => r.estDailyDatapoints },
     { key: "pct", header: "% of total", align: "right", render: (r) => `${totalSeries > 0 ? ((r.series / totalSeries) * 100).toFixed(2) : "0"}%`, sortValue: (r) => r.series },
-  ], [totalSeries]);
+  ], [totalSeries, rateCentsPerDp]);
 
   if (loading) return <Loader msg={progress} />;
 
@@ -77,10 +90,10 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
         <Stat label="Total series" value={fmtNum(totalSeries)} />
         <Stat label="Est. datapoints / day"
               value={fmtNum(totalEst)}
-              sub="series × 1440 (1-min resolution heuristic)" />
-        <Stat label="Top metric"
-              value={rows[0]?.metric_key.slice(0, 24) + (rows[0]?.metric_key.length > 24 ? "…" : "")}
-              sub={`${fmtNum(rows[0]?.series ?? 0)} series`} />
+              sub={`Cost: ${fmtUSD(totalDailyCost)}/day`} />
+        <Stat label="Est. monthly cost"
+              value={fmtUSD(totalDailyCost * 30)}
+              sub={`${fmtUSD(totalDailyCost * 365)}/yr`} />
       </div>
 
       <Card>
@@ -97,6 +110,9 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
             }}
           />
           <span style={{ fontSize: 12, opacity: 0.7 }}>{filtered.length} matches</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#1496ff" }}>
+            Filtered cost: {fmtUSD(filteredMonthlyCost)}/mo ({fmtUSD(filteredAnnualCost)}/yr)
+          </span>
         </div>
 
         <SortableTable
@@ -122,6 +138,7 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
 const MetricDetail: React.FC<{ metricKey: string; timeframe: string; onClose: () => void }> = ({
   metricKey, timeframe, onClose,
 }) => {
+  const { rateCentsPerDp } = useSettings();
   const [loading, setLoading] = useState(true);
   const [daily, setDaily] = useState<{ values: number[]; total: number }>({ values: [], total: 0 });
   const [bySource, setBySource] = useState<{ source: string; series: number }[]>([]);
@@ -155,12 +172,13 @@ const MetricDetail: React.FC<{ metricKey: string; timeframe: string; onClose: ()
       {loading ? <Loader /> : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 12 }}>
-            <Stat label="Datapoints (30d)" value={fmtNum(daily.total)} />
-            <Stat label="Avg / day" value={fmtNum(daily.values.length ? daily.total / daily.values.length : 0)} />
+            <Stat label="Datapoints (30d)" value={fmtNum(daily.total)} sub={`Cost: ${fmtUSD(costUSD(daily.total, rateCentsPerDp))}`} />
+            <Stat label="Avg / day" value={fmtNum(daily.values.length ? daily.total / daily.values.length : 0)} sub={`${fmtUSD(costUSD(daily.values.length ? daily.total / daily.values.length : 0, rateCentsPerDp))}/day`} />
             <Stat label="Daily trend"
                   value={`${fc.slope >= 0 ? "+" : ""}${fmtNum(fc.slope)}/d`}
                   sub={`R²=${fc.r2.toFixed(2)}`} />
-            <Stat label="Forecast in 14d" value={fmtNum(fc.forecast[fc.forecast.length - 1] ?? 0)} />
+            <Stat label="Forecast in 14d" value={fmtNum(fc.forecast[fc.forecast.length - 1] ?? 0)} sub={`${fmtUSD(costUSD(fc.forecast[fc.forecast.length - 1] ?? 0, rateCentsPerDp))}/day`} />
+            <Stat label="Est. monthly cost" value={fmtUSD(costUSD(daily.values.length ? (daily.total / daily.values.length) * 30 : 0, rateCentsPerDp))} />
           </div>
           <LineChart
             history={fc.history}

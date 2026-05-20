@@ -4,6 +4,8 @@ import { LineChart } from "../components/LineChart";
 import { BarList } from "../components/BarList";
 import { fetchSourceSeries } from "../lib/queries";
 import { fmtNum, linearForecast } from "../lib/forecast";
+import { costUSD, fmtUSD } from "../lib/cost";
+import { useSettings } from "../state/SettingsContext";
 
 interface Props { timeframe: string; }
 
@@ -18,6 +20,7 @@ function intervalForTf(tf: string): string {
 }
 
 export const SourcesPage: React.FC<Props> = ({ timeframe }) => {
+  const { rateCentsPerDp } = useSettings();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{ source: string; values: number[]; total: number }[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -78,13 +81,14 @@ export const SourcesPage: React.FC<Props> = ({ timeframe }) => {
           {sel && fc && (
             <>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 12 }}>
-                <Stat label="Datapoints (timeframe)" value={fmtNum(sel.total)} />
+                <Stat label="Datapoints (timeframe)" value={fmtNum(sel.total)} sub={`Cost: ${fmtUSD(costUSD(sel.total, rateCentsPerDp))}`} />
                 <Stat label="% of all sources" value={totals ? `${((sel.total / totals) * 100).toFixed(1)}%` : "—"} />
                 <Stat label="Trend / interval"
                       value={`${fc.slope >= 0 ? "+" : ""}${fmtNum(fc.slope)}`}
                       sub={`R²=${fc.r2.toFixed(2)}`} />
-                <Stat label="Projected (next horizon)"
-                      value={fmtNum(fc.forecast.reduce((a, b) => a + b, 0))} />
+                <Stat label="Est. monthly cost"
+                      value={fmtUSD(costUSD(sel.total, rateCentsPerDp) * 30)}
+                      sub={`${fmtUSD(costUSD(sel.total, rateCentsPerDp) * 365)}/yr`} />
               </div>
               <LineChart
                 history={fc.history}

@@ -10,6 +10,8 @@ import {
   ChannelRow,
 } from "../lib/queries";
 import { fmtNum } from "../lib/forecast";
+import { costUSD, fmtUSD } from "../lib/cost";
+import { useSettings } from "../state/SettingsContext";
 
 interface Props { timeframe: string; }
 
@@ -24,6 +26,7 @@ function intervalForTf(tf: string): string {
 }
 
 export const OverviewPage: React.FC<Props> = ({ timeframe }) => {
+  const { rateCentsPerDp } = useSettings();
   const [loading, setLoading] = useState(true);
   const [series, setSeries] = useState<{ start: number; interval: number; values: number[] } | null>(null);
   const [sources, setSources] = useState<SourceRow[]>([]);
@@ -50,18 +53,17 @@ export const OverviewPage: React.FC<Props> = ({ timeframe }) => {
   if (loading) return <Loader msg="Loading metric ingest..." />;
 
   const total = (series?.values || []).reduce((a, b) => a + b, 0);
+  const totalCost = costUSD(total, rateCentsPerDp);
   const sourceTotal = sources.reduce((a, b) => a + b.total, 0);
   const channelTotal = channels.reduce((a, b) => a + b.total, 0);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-        <Stat label="Total ingested datapoints" value={fmtNum(total)} sub={`Timeframe: ${timeframe}`} />
+        <Stat label="Total ingested datapoints" value={fmtNum(total)} sub={`Cost: ${fmtUSD(totalCost)}`} />
+        <Stat label="Est. monthly cost" value={fmtUSD(totalCost * 30)} sub={`${fmtUSD(totalCost * 365)}/yr (extrapolated)`} />
         <Stat label="Distinct ingest sources" value={String(sources.length)} />
         <Stat label="Distinct ingest channels" value={String(channels.length)} />
-        <Stat label="Top source share" value={
-          sourceTotal > 0 ? `${(((sources[0]?.total ?? 0) / sourceTotal) * 100).toFixed(1)}%` : "—"
-        } sub={sources[0]?.source ?? "—"} />
       </div>
 
       <Card title="Ingested datapoints over time">
