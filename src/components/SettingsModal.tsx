@@ -84,10 +84,10 @@ export const SettingsModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           </div>
 
           <div>
-            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Cost per datapoint (cents)</div>
-            <input ref={rateRef} type="text" defaultValue={String(rateCentsPerDp)} placeholder="e.g. 0.00000045" style={inputStyle} />
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Cost per datapoint ($)</div>
+            <input ref={rateRef} type="text" defaultValue={String(rateCentsPerDp)} placeholder="e.g. 4.55e-7" style={inputStyle} />
             <div style={{ fontSize: 11, opacity: 0.65, marginTop: 4 }}>
-              Default: {DEFAULT_RATE_CENTS_PER_DP} ¢/DP (= ${(DEFAULT_RATE_CENTS_PER_DP / 100).toExponential(3)}/DP). Supports tiny fractions like 0.00000045.
+              Default: {DEFAULT_RATE_CENTS_PER_DP} $/DP (= $45.50 per 100M datapoints). Enter as decimal or scientific notation.
             </div>
           </div>
 

@@ -1,8 +1,8 @@
 {
-  "environmentUrl": "https://fzu06327.apps.dynatrace.com",
+  "environmentUrl": "https://vpx74458.apps.dynatrace.com",
   "app": {
     "name": "Metric Ingest Insights",
-    "version": "0.8.0",
+    "version": "0.9.0",
     "id": "my.metric.ingest",
     "description": "Analyze metric ingest volume by metric key, source, and forecast trends.",
     "scopes": [

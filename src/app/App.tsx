@@ -6,6 +6,7 @@ import { SourcesPage } from "../pages/SourcesPage";
 import { ForecastPage } from "../pages/ForecastPage";
 import { ForecastTopNPage } from "../pages/ForecastTopNPage";
 import { CostForecastPage } from "../pages/CostForecastPage";
+import { CostPage } from "../pages/CostPage";
 import { OptimizePage } from "../pages/OptimizePage";
 import { UsagePage } from "../pages/UsagePage";
 import { DiffPage } from "../pages/DiffPage";
@@ -16,6 +17,7 @@ import { DEFAULT_RATE_CENTS_PER_DP } from "../lib/cost";
 type Tab =
   | "overview"
   | "metrics"
+  | "cost"
   | "sources"
   | "usage"
   | "diff"
@@ -27,6 +29,7 @@ type Tab =
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "metrics", label: "Top Metrics" },
+  { id: "cost", label: "Cost" },
   { id: "sources", label: "Sources" },
   { id: "usage", label: "Idle Metrics" },
   { id: "diff", label: "Weekly Diff" },
@@ -77,7 +80,7 @@ const Shell: React.FC = () => {
               </div>
               <button
                 onClick={() => setSettingsOpen(true)}
-                title={`Settings — Top N=${topN}, Cost=${rateCentsPerDp}¢/DP`}
+                title={`Settings — Top N=${topN}, Cost=$${rateCentsPerDp}/DP`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -121,6 +124,7 @@ const Shell: React.FC = () => {
           <div>
             {tab === "overview" && <OverviewPage timeframe={timeframe} />}
             {tab === "metrics" && <TopMetricsPage timeframe={timeframe} />}
+            {tab === "cost" && <CostPage timeframe={timeframe} />}
             {tab === "sources" && <SourcesPage timeframe={timeframe} />}
             {tab === "usage" && <UsagePage />}
             {tab === "diff" && <DiffPage />}

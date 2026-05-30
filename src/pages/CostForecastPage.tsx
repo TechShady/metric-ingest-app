@@ -182,7 +182,7 @@ export const CostForecastPage: React.FC<Props> = ({ topN }) => {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <Stat label={`Cost (last ${HISTORY_DAYS}d)`} value={fmtUSD(currentCost)}
-              sub={`${fmtNum(totalCurrentDp)} datapoints @ ${rateCentsPerDp}¢/DP`} />
+              sub={`${fmtNum(totalCurrentDp)} datapoints @ $${rateCentsPerDp}/DP`} />
         <Stat label="Daily avg cost" value={fmtUSD(dailyAvgCost)} />
         <Stat label="Monthly run-rate" value={fmtUSD(monthlyRunRate)} sub="current daily avg × 30" />
         <Stat label="Annual run-rate" value={fmtUSD(annualRunRate)} sub="current daily avg × 365" />
@@ -206,7 +206,7 @@ export const CostForecastPage: React.FC<Props> = ({ topN }) => {
           yLabel="USD / day"
         />
         <div style={{ fontSize: 11, opacity: 0.65, marginTop: 8 }}>
-          Daily $ = daily datapoints × {rateCentsPerDp}¢ ÷ 100. Shaded band = 95% prediction interval.
+          Daily $ = daily datapoints × ${rateCentsPerDp}/DP. Shaded band = 95% prediction interval.
         </div>
       </Card>
 
@@ -263,7 +263,7 @@ export const CostForecastPage: React.FC<Props> = ({ topN }) => {
 
       <Card>
         <div style={{ fontSize: 11, opacity: 0.65 }}>
-          Cost rate: <strong>{rateCentsPerDp}¢ per datapoint</strong> (${(rateCentsPerDp / 100).toExponential(3)}/DP).
+          Cost rate: <strong>${rateCentsPerDp}/DP</strong> (= $45.50 per 100M datapoints at default).
           Adjust in the Settings dialog (gear icon, top-right). All forecasts use OLS linear regression with a 95% prediction interval; treat as conservative trend indicators.
         </div>
       </Card>

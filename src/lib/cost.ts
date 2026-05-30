@@ -1,12 +1,15 @@
 /**
- * Cost utilities. Cost rate is expressed in CENTS per datapoint.
- * Default: 0.000000455 cents/datapoint (= $0.00000000455).
+ * Cost utilities. Cost rate is expressed in USD per datapoint.
+ * Default: $45.50 per 100,000,000 DP = $4.55e-7 per DP.
  */
 
-export const DEFAULT_RATE_CENTS_PER_DP = 0.000000455;
+export const DEFAULT_RATE_USD_PER_DP = 4.55e-7;
 
-export function costUSD(datapoints: number, ratePerDpCents: number): number {
-  return (datapoints * ratePerDpCents) / 100;
+/** @deprecated alias for backwards compat */
+export const DEFAULT_RATE_CENTS_PER_DP = DEFAULT_RATE_USD_PER_DP;
+
+export function costUSD(datapoints: number, ratePerDpUSD: number): number {
+  return datapoints * ratePerDpUSD;
 }
 
 export function fmtUSD(v: number): string {
