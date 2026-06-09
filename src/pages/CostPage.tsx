@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card, Loader, Stat } from "../components/Common";
 import { SortableTable, Column } from "../components/SortableTable";
-import { fetchAllMetricCardinality, MetricKeyRow } from "../lib/queries";
+import { fetchAllMetricCardinality, fetchTotalIngestSeries, MetricKeyRow } from "../lib/queries";
 import { fmtNum } from "../lib/forecast";
 import { costUSD, fmtUSD } from "../lib/cost";
 import { useSettings } from "../state/SettingsContext";
@@ -32,11 +32,23 @@ function timeframeDays(tf: string): number {
 
 const ASSUMED_DP_PER_SERIES_PER_DAY = 1440;
 
+/** Interval label for SFM timeseries query based on timeframe. */
+function intervalForTf(tf: string): string {
+  if (tf.includes("1h")) return "1m";
+  if (tf.includes("6h")) return "5m";
+  if (tf.includes("1d")) return "30m";
+  if (tf.includes("7d")) return "1h";
+  if (tf.includes("14d")) return "3h";
+  if (tf.includes("30d")) return "6h";
+  return "1h";
+}
+
 export const CostPage: React.FC<Props> = ({ timeframe }) => {
   const { rateCentsPerDp } = useSettings();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<string>("");
   const [rows, setRows] = useState<MetricKeyRow[]>([]);
+  const [sfmTotalDp, setSfmTotalDp] = useState<number | null>(null);
   const [filter, setFilter] = useState("");
   const [capped, setCapped] = useState(false);
 
@@ -49,9 +61,16 @@ export const CostPage: React.FC<Props> = ({ timeframe }) => {
     setCapped(wasCapped);
     setProgress(`Querying metric cardinality (chunked by prefix)...`);
     (async () => {
-      const r = await fetchAllMetricCardinality(tf);
+      const [r, sfm] = await Promise.all([
+        fetchAllMetricCardinality(tf),
+        fetchTotalIngestSeries(timeframe, intervalForTf(timeframe)),
+      ]);
       if (abort) return;
       setRows(r);
+      if (sfm) {
+        const total = sfm.values.reduce((a, b) => a + b, 0);
+        setSfmTotalDp(total);
+      }
       setLoading(false);
     })();
     return () => { abort = true; };
@@ -62,17 +81,29 @@ export const CostPage: React.FC<Props> = ({ timeframe }) => {
     return rows.filter((x) => x.metric_key.toLowerCase().includes(filter.toLowerCase()));
   }, [rows, filter]);
 
-  // Cost calculations for the full timeframe
-  const totalDpInPeriod = rows.reduce((a, b) => a + b.series * ASSUMED_DP_PER_SERIES_PER_DAY * days, 0);
+  // Use SFM actual datapoints when available; fall back to series * 1440 heuristic
+  const totalSeries = rows.reduce((a, b) => a + b.series, 0);
+  const useSfm = sfmTotalDp != null && sfmTotalDp > 0 && totalSeries > 0;
+  // Proportional DP estimate for a row: row.series / totalSeries * sfmTotalDp (for full period)
+  const dpForRow = (r: MetricKeyRow) =>
+    useSfm
+      ? (r.series / totalSeries) * sfmTotalDp!
+      : r.series * ASSUMED_DP_PER_SERIES_PER_DAY * days;
+
+  const totalDpInPeriod = useSfm ? sfmTotalDp! : rows.reduce((a, b) => a + b.series * ASSUMED_DP_PER_SERIES_PER_DAY * days, 0);
   const totalCostInPeriod = costUSD(totalDpInPeriod, rateCentsPerDp);
 
-  const filteredDpInPeriod = filtered.reduce((a, b) => a + b.series * ASSUMED_DP_PER_SERIES_PER_DAY * days, 0);
+  const filteredDpInPeriod = filtered.reduce((a, b) => a + dpForRow(b), 0);
   const filteredCostInPeriod = costUSD(filteredDpInPeriod, rateCentsPerDp);
-  const filteredMonthlyCost = costUSD(filtered.reduce((a, b) => a + b.estDailyDatapoints, 0), rateCentsPerDp) * 30;
-  const filteredAnnualCost = costUSD(filtered.reduce((a, b) => a + b.estDailyDatapoints, 0), rateCentsPerDp) * 365;
+  const filteredDailyDp = filteredDpInPeriod / Math.max(1, days);
+  const filteredMonthlyCost = costUSD(filteredDailyDp, rateCentsPerDp) * 30;
+  const filteredAnnualCost = costUSD(filteredDailyDp, rateCentsPerDp) * 365;
 
   const columns = useMemo((): Column<MetricKeyRow>[] => {
-    const dpForRow = (r: MetricKeyRow) => r.series * ASSUMED_DP_PER_SERIES_PER_DAY * days;
+    const dailyCostForRow = (r: MetricKeyRow) =>
+      useSfm
+        ? costUSD((r.series / totalSeries) * (sfmTotalDp! / Math.max(1, days)), rateCentsPerDp)
+        : costUSD(r.estDailyDatapoints, rateCentsPerDp);
     return [
       { key: "name", header: "Metric key", render: (r) => <code>{r.metric_key}</code>, sortValue: (r) => r.metric_key },
       { key: "series", header: "Series", align: "right", render: (r) => fmtNum(r.series), sortValue: (r) => r.series },
@@ -84,11 +115,11 @@ export const CostPage: React.FC<Props> = ({ timeframe }) => {
         },
         sortValue: (r) => dpForRow(r) },
       { key: "monthly", header: "Est. $/month", align: "right",
-        render: (r) => fmtUSD(costUSD(r.estDailyDatapoints, rateCentsPerDp) * 30),
-        sortValue: (r) => r.estDailyDatapoints },
+        render: (r) => fmtUSD(dailyCostForRow(r) * 30),
+        sortValue: (r) => r.series },
       { key: "annual", header: "Est. $/year", align: "right",
-        render: (r) => fmtUSD(costUSD(r.estDailyDatapoints, rateCentsPerDp) * 365),
-        sortValue: (r) => r.estDailyDatapoints },
+        render: (r) => fmtUSD(dailyCostForRow(r) * 365),
+        sortValue: (r) => r.series },
       { key: "pct", header: "% of total", align: "right",
         render: (r) => {
           const pct = totalDpInPeriod > 0 ? (dpForRow(r) / totalDpInPeriod) * 100 : 0;
@@ -99,7 +130,7 @@ export const CostPage: React.FC<Props> = ({ timeframe }) => {
         },
         sortValue: (r) => r.series },
     ];
-  }, [days, rateCentsPerDp, totalDpInPeriod]);
+  }, [days, rateCentsPerDp, totalDpInPeriod, useSfm, sfmTotalDp, totalSeries]);
 
   if (loading) return <Loader msg={progress} />;
 
@@ -116,8 +147,8 @@ export const CostPage: React.FC<Props> = ({ timeframe }) => {
         <Stat label={`Total cost (${Math.round(days)}d)`}
               value={fmtUSD(totalCostInPeriod)}
               sub={`${fmtNum(totalDpInPeriod)} datapoints`} />
-        <Stat label="Est. monthly cost" value={fmtUSD(costUSD(rows.reduce((a, b) => a + b.estDailyDatapoints, 0), rateCentsPerDp) * 30)} />
-        <Stat label="Est. annual cost" value={fmtUSD(costUSD(rows.reduce((a, b) => a + b.estDailyDatapoints, 0), rateCentsPerDp) * 365)} />
+        <Stat label="Est. monthly cost" value={fmtUSD(costUSD(totalDpInPeriod / Math.max(1, days), rateCentsPerDp) * 30)} />
+        <Stat label="Est. annual cost" value={fmtUSD(costUSD(totalDpInPeriod / Math.max(1, days), rateCentsPerDp) * 365)} />
       </div>
 
       <Card>
@@ -157,8 +188,10 @@ export const CostPage: React.FC<Props> = ({ timeframe }) => {
       <Card>
         <div style={{ fontSize: 11, opacity: 0.65 }}>
           Rate: <strong>${rateCentsPerDp}/DP</strong> (= $45.50 per 100M datapoints at default).
-          Datapoints estimated as series × 1,440/day (1-min resolution).
-          Adjust rate in Settings (gear icon). Tip: filter by metric prefix to show cost for a specific team or source.
+          {useSfm
+            ? " Datapoints from actual SFM ingest data, distributed proportionally by series count."
+            : " Datapoints estimated as series × 1,440/day (1-min resolution fallback)."}
+          {" "}Adjust rate in Settings (gear icon). Tip: filter by metric prefix to show cost for a specific team or source.
         </div>
       </Card>
     </div>

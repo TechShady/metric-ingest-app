@@ -15,6 +15,17 @@ import { useSettings } from "../state/SettingsContext";
 
 interface Props { timeframe: string; }
 
+/** Parse timeframe string like "now()-7d" to number of days. */
+function timeframeDays(tf: string): number {
+  const m = tf.match(/^now\(\)-(\d+)([dhm])$/);
+  if (!m) return 7;
+  const n = parseInt(m[1], 10);
+  const unit = m[2];
+  if (unit === "d") return n;
+  if (unit === "h") return n / 24;
+  return n / (24 * 60);
+}
+
 function intervalForTf(tf: string): string {
   if (tf.includes("1h")) return "1m";
   if (tf.includes("6h")) return "5m";
@@ -31,6 +42,8 @@ export const OverviewPage: React.FC<Props> = ({ timeframe }) => {
   const [series, setSeries] = useState<{ start: number; interval: number; values: number[] } | null>(null);
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [channels, setChannels] = useState<ChannelRow[]>([]);
+
+  const days = timeframeDays(timeframe);
 
   useEffect(() => {
     let abort = false;
@@ -54,6 +67,7 @@ export const OverviewPage: React.FC<Props> = ({ timeframe }) => {
 
   const total = (series?.values || []).reduce((a, b) => a + b, 0);
   const totalCost = costUSD(total, rateCentsPerDp);
+  const dailyAvgCost = totalCost / Math.max(1, days);
   const sourceTotal = sources.reduce((a, b) => a + b.total, 0);
   const channelTotal = channels.reduce((a, b) => a + b.total, 0);
 
@@ -61,7 +75,7 @@ export const OverviewPage: React.FC<Props> = ({ timeframe }) => {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <Stat label="Total ingested datapoints" value={fmtNum(total)} sub={`Cost: ${fmtUSD(totalCost)}`} />
-        <Stat label="Est. monthly cost" value={fmtUSD(totalCost * 30)} sub={`${fmtUSD(totalCost * 365)}/yr (extrapolated)`} />
+        <Stat label="Est. monthly cost" value={fmtUSD(dailyAvgCost * 30)} sub={`${fmtUSD(dailyAvgCost * 365)}/yr (extrapolated)`} />
         <Stat label="Distinct ingest sources" value={String(sources.length)} />
         <Stat label="Distinct ingest channels" value={String(channels.length)} />
       </div>

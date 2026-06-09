@@ -5,6 +5,7 @@ import { LineChart } from "../components/LineChart";
 import { BarList } from "../components/BarList";
 import {
   fetchAllMetricCardinality,
+  fetchTotalIngestSeries,
   MetricKeyRow,
   fetchMetricDailyDatapoints,
   fetchMetricBySource,
@@ -29,14 +30,39 @@ const capTimeframe = (tf: string): { capped: string; wasCapped: boolean } => {
 
 const ASSUMED_DP_PER_SERIES_PER_DAY = 1440;
 
+/** Interval label for SFM timeseries query based on timeframe. */
+function intervalForTf(tf: string): string {
+  if (tf.includes("1h")) return "1m";
+  if (tf.includes("6h")) return "5m";
+  if (tf.includes("1d")) return "30m";
+  if (tf.includes("7d")) return "1h";
+  if (tf.includes("14d")) return "3h";
+  if (tf.includes("30d")) return "6h";
+  return "1h";
+}
+
+/** Parse timeframe string like "now()-7d" to number of days. */
+function timeframeDays(tf: string): number {
+  const m = tf.match(/^now\(\)-(\d+)([dhm])$/);
+  if (!m) return 7;
+  const n = parseInt(m[1], 10);
+  const unit = m[2];
+  if (unit === "d") return n;
+  if (unit === "h") return n / 24;
+  return n / (24 * 60);
+}
+
 export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
   const { rateCentsPerDp } = useSettings();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<string>("");
   const [rows, setRows] = useState<MetricKeyRow[]>([]);
+  const [sfmTotalDp, setSfmTotalDp] = useState<number | null>(null);
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [capped, setCapped] = useState(false);
+
+  const days = timeframeDays(timeframe);
 
   useEffect(() => {
     let abort = false;
@@ -45,9 +71,16 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
     setCapped(wasCapped);
     setProgress(`Querying metric cardinality over ${tf}${wasCapped ? " (capped from " + timeframe + ")" : ""} (chunked by prefix)...`);
     (async () => {
-      const r = await fetchAllMetricCardinality(tf);
+      const [r, sfm] = await Promise.all([
+        fetchAllMetricCardinality(tf),
+        fetchTotalIngestSeries(timeframe, intervalForTf(timeframe)),
+      ]);
       if (abort) return;
       setRows(r);
+      if (sfm) {
+        const total = sfm.values.reduce((a, b) => a + b, 0);
+        setSfmTotalDp(total);
+      }
       setLoading(false);
     })();
     return () => { abort = true; };
@@ -59,22 +92,28 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
   }, [rows, filter]);
 
   const totalSeries = rows.reduce((a, b) => a + b.series, 0);
-  const totalEst = rows.reduce((a, b) => a + b.estDailyDatapoints, 0);
-  const totalDailyCost = costUSD(totalEst, rateCentsPerDp);
+  const useSfm = sfmTotalDp != null && sfmTotalDp > 0 && totalSeries > 0;
+  const totalDpInPeriod = useSfm ? sfmTotalDp! : rows.reduce((a, b) => a + b.series * ASSUMED_DP_PER_SERIES_PER_DAY * days, 0);
+  const totalDailyDp = totalDpInPeriod / Math.max(1, days);
+  const totalDailyCost = costUSD(totalDailyDp, rateCentsPerDp);
 
-  const filteredSeries = filtered.reduce((a, b) => a + b.series, 0);
-  const filteredEst = filtered.reduce((a, b) => a + b.estDailyDatapoints, 0);
-  const filteredDailyCost = costUSD(filteredEst, rateCentsPerDp);
+  const dpForRow = (r: MetricKeyRow) =>
+    useSfm
+      ? (r.series / totalSeries) * totalDailyDp
+      : r.estDailyDatapoints;
+
+  const filteredDailyDp = filtered.reduce((a, b) => a + dpForRow(b), 0);
+  const filteredDailyCost = costUSD(filteredDailyDp, rateCentsPerDp);
   const filteredMonthlyCost = filteredDailyCost * 30;
   const filteredAnnualCost = filteredDailyCost * 365;
 
   const columns = useMemo((): Column<MetricKeyRow>[] => [
     { key: "name", header: "Metric key", render: (r) => <code>{r.metric_key}</code>, sortValue: (r) => r.metric_key },
     { key: "series", header: "Series", align: "right", render: (r) => fmtNum(r.series), sortValue: (r) => r.series },
-    { key: "dp", header: "Est. DP/day", align: "right", render: (r) => fmtNum(r.estDailyDatapoints), sortValue: (r) => r.estDailyDatapoints },
-    { key: "cost", header: "Est. $/month", align: "right", render: (r) => fmtUSD(costUSD(r.estDailyDatapoints, rateCentsPerDp) * 30), sortValue: (r) => r.estDailyDatapoints },
+    { key: "dp", header: "Est. DP/day", align: "right", render: (r) => fmtNum(dpForRow(r)), sortValue: (r) => dpForRow(r) },
+    { key: "cost", header: "Est. $/month", align: "right", render: (r) => fmtUSD(costUSD(dpForRow(r), rateCentsPerDp) * 30), sortValue: (r) => dpForRow(r) },
     { key: "pct", header: "% of total", align: "right", render: (r) => `${totalSeries > 0 ? ((r.series / totalSeries) * 100).toFixed(2) : "0"}%`, sortValue: (r) => r.series },
-  ], [totalSeries, rateCentsPerDp]);
+  ], [totalSeries, rateCentsPerDp, useSfm, totalDailyDp]);
 
   if (loading) return <Loader msg={progress} />;
 
@@ -89,7 +128,7 @@ export const TopMetricsPage: React.FC<Props> = ({ timeframe }) => {
         <Stat label="Distinct metric keys" value={String(rows.length)} />
         <Stat label="Total series" value={fmtNum(totalSeries)} />
         <Stat label="Est. datapoints / day"
-              value={fmtNum(totalEst)}
+              value={fmtNum(totalDailyDp)}
               sub={`Cost: ${fmtUSD(totalDailyCost)}/day`} />
         <Stat label="Est. monthly cost"
               value={fmtUSD(totalDailyCost * 30)}
